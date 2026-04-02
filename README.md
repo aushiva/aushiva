@@ -1,6 +1,6 @@
 # Aushiva React Template
 
-React + Vite medicine inventory app with an Express + SQLite backend.
+React + Vite medicine inventory app with an Express + Postgres backend.
 
 ## Included
 
@@ -9,7 +9,7 @@ React + Vite medicine inventory app with an Express + SQLite backend.
 - Scan Barcode page with manual lookup flow
 - Expiry Alerts page with summary cards and filtering
 - Usage Tracking and Hospital Exchange sections
-- Express API + SQLite database
+- Express API + Postgres database
 - Seeded medicines and exchange requests from the 1000-medicine dataset
 - Login flow backed by the database
 
@@ -34,5 +34,5 @@ React + Vite medicine inventory app with an Express + SQLite backend.
 ## Notes
 
 - Demo login: `admin@aushiva.local` / `admin123`
-- Inventory changes persist in `backend/data/aushiva.db`.
+- Inventory changes persist in the Postgres database configured by `backend/.env`.
 - For Gmail OTP signup, add EmailJS keys to `.env` (see `.env.example`) and create an EmailJS template with `to_email`, `to_name`, and `otp_code` variables.

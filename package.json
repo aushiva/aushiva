@@ -8,6 +8,7 @@
     "dev:backend": "npm --prefix backend run dev",
     "dev:frontend": "vite",
     "build": "vite build",
+    "start": "npm --prefix backend start",
     "preview": "vite preview",
     "postinstall": "npm --prefix backend install"
   },

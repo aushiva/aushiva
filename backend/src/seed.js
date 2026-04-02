@@ -222,22 +222,23 @@ const alertMedicines = [
   }
 ];
 
-export function seedIfEmpty() {
-  if (countMedicines() === 0) {
-    replaceMedicines(seedMedicines);
+export async function seedIfEmpty() {
+  if ((await countMedicines()) === 0) {
+    await replaceMedicines(seedMedicines);
   }
 
-  alertMedicines.forEach((medicine) => {
-    if (!getMedicineByBarcodeAndHospital(medicine.barcode, medicine.hospital)) {
-      createMedicine(medicine);
+  for (const medicine of alertMedicines) {
+    const existing = await getMedicineByBarcodeAndHospital(medicine.barcode, medicine.hospital);
+    if (!existing) {
+      await createMedicine(medicine);
     }
-  });
-
-  if (countExchangeRequests() === 0) {
-    replaceExchangeRequests(seedExchangeRequests);
   }
 
-  migrateUserEmail("admin@aushiva.local", seedUser);
-  ensureUser(seedUser);
-  updateUserHospital(seedUser.email, "Aushiva");
+  if ((await countExchangeRequests()) === 0) {
+    await replaceExchangeRequests(seedExchangeRequests);
+  }
+
+  await migrateUserEmail("admin@aushiva.local", seedUser);
+  await ensureUser(seedUser);
+  await updateUserHospital(seedUser.email, "Aushiva");
 }
