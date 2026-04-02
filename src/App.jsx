@@ -227,7 +227,7 @@ function BarChart({ data }) {
   );
 }
 
-function LoginScreen({ mode, onLogin, onSignup, onResetPassword, errorMessage, onToggleMode, onForgot }) {
+function LoginScreen({ mode, onLogin, onSignup, onResetPassword, errorMessage, onToggleMode, onForgot, busy }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -382,7 +382,7 @@ function LoginScreen({ mode, onLogin, onSignup, onResetPassword, errorMessage, o
             <p>Hospital Management System</p>
           </div>
 
-        <form className="auth-form" onSubmit={submit}>
+          <form className="auth-form" onSubmit={submit}>
           {mode === "signup" ? (
             <>
               <label>
@@ -498,13 +498,17 @@ function LoginScreen({ mode, onLogin, onSignup, onResetPassword, errorMessage, o
           {errorMessage ? <p className="auth-error">{errorMessage}</p> : null}
           {otpMessage && (mode === "signup" || mode === "reset") ? <p className="auth-otp-message">{otpMessage}</p> : null}
           
-          <button
-            type="submit"
-            className="auth-btn"
-            disabled={(mode === "signup" || mode === "reset") && otpStatus !== "verified"}
-          >
-            {mode === "signup" ? "CREATE ACCOUNT" : mode === "reset" ? "RESET PASSWORD" : "SIGN IN"}
-          </button>
+            <button
+              type="submit"
+              className="auth-btn"
+              disabled={busy || ((mode === "signup" || mode === "reset") && otpStatus !== "verified")}
+            >
+              {mode === "signup"
+                ? (busy ? "CREATING..." : "CREATE ACCOUNT")
+                : mode === "reset"
+                  ? (busy ? "RESETTING..." : "RESET PASSWORD")
+                  : (busy ? "SIGNING IN..." : "SIGN IN")}
+            </button>
         </form>
 
         <div className="auth-footer">
@@ -606,6 +610,9 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [authError, setAuthError] = useState("");
   const [authMode, setAuthMode] = useState("login");
+  const [authBusy, setAuthBusy] = useState(false);
+  const [sessionLoading, setSessionLoading] = useState(true);
+  const [dataLoaded, setDataLoaded] = useState(false);
   const [activeView, setActiveView] = useState("dashboard");
   const [medicines, setMedicines] = useState([]);
   const [inventorySearchInput, setInventorySearchInput] = useState("");
@@ -644,18 +651,28 @@ export default function App() {
     let alive = true;
 
     (async () => {
-      await bootstrapBackend();
-      const [sessionValue, medicinesValue, requestsValue] = await Promise.all([
-        getSession(),
-        getMedicines(),
-        getExchangeRequests()
-      ]);
+      try {
+        await bootstrapBackend();
+        const sessionValue = await getSession();
+        if (!alive) return;
+        setSession(sessionValue);
+        setSessionLoading(false);
 
-      if (!alive) return;
-      setSession(sessionValue);
-      const cleanedMedicines = applyMedicineCleanup(medicinesValue, { persist: true });
-      setMedicines(cleanedMedicines);
-      setExchangeRequests(requestsValue);
+        if (sessionValue) {
+          const [medicinesValue, requestsValue] = await Promise.all([
+            getMedicines(),
+            getExchangeRequests()
+          ]);
+          if (!alive) return;
+          const cleanedMedicines = applyMedicineCleanup(medicinesValue, { persist: true });
+          setMedicines(cleanedMedicines);
+          setExchangeRequests(requestsValue);
+          setDataLoaded(true);
+        }
+      } catch {
+        if (!alive) return;
+        setSessionLoading(false);
+      }
     })();
 
     return () => {
@@ -682,6 +699,29 @@ export default function App() {
       clearInterval(id);
     };
   }, [activeView]);
+
+  useEffect(() => {
+    if (!session || dataLoaded) return;
+    let alive = true;
+    (async () => {
+      try {
+        const [medicinesValue, requestsValue] = await Promise.all([
+          getMedicines(),
+          getExchangeRequests()
+        ]);
+        if (!alive) return;
+        const cleanedMedicines = applyMedicineCleanup(medicinesValue, { persist: true });
+        setMedicines(cleanedMedicines);
+        setExchangeRequests(requestsValue);
+        setDataLoaded(true);
+      } catch {
+        // ignore load errors; user can retry by refreshing
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [session, dataLoaded]);
 
   useEffect(() => {
     let alive = true;
@@ -1011,7 +1051,6 @@ export default function App() {
       accepted: "Accepted",
       declined: "Declined"
     };
-
     return submittedRequests.filter((request) => request.status === statusMap[submittedStatusFilter]);
   }, [submittedRequests, submittedStatusFilter]);
   const declineTarget = useMemo(
@@ -1088,39 +1127,59 @@ export default function App() {
   }
 
   async function handleLogin(email, password) {
-    const result = await login(email, password);
-    if (!result.ok) {
-      setAuthError(result.message);
-      return;
+    if (authBusy) return;
+    setAuthBusy(true);
+    try {
+      const result = await login(email, password);
+      if (!result.ok) {
+        setAuthError(result.message);
+        return;
+      }
+      setAuthError("");
+      setSession(result.session);
+      setDataLoaded(false);
+    } finally {
+      setAuthBusy(false);
     }
-    setAuthError("");
-    setSession(result.session);
   }
 
   async function handleSignup(payload) {
-    const result = await signup(payload);
-    if (!result.ok) {
-      setAuthError(result.message);
-      return;
+    if (authBusy) return;
+    setAuthBusy(true);
+    try {
+      const result = await signup(payload);
+      if (!result.ok) {
+        setAuthError(result.message);
+        return;
+      }
+      setAuthError(result.message || "Account created. Please sign in.");
+      setSession(null);
+      setAuthMode("login");
+    } finally {
+      setAuthBusy(false);
     }
-    setAuthError(result.message || "Account created. Please sign in.");
-    setSession(null);
-    setAuthMode("login");
   }
 
   async function handleResetPassword(payload) {
-    const result = await resetPassword(payload);
-    if (!result.ok) {
-      setAuthError(result.message);
-      return;
+    if (authBusy) return;
+    setAuthBusy(true);
+    try {
+      const result = await resetPassword(payload);
+      if (!result.ok) {
+        setAuthError(result.message);
+        return;
+      }
+      setAuthError(result.message || "Password updated. Please sign in.");
+      setAuthMode("login");
+    } finally {
+      setAuthBusy(false);
     }
-    setAuthError(result.message || "Password updated. Please sign in.");
-    setAuthMode("login");
   }
 
   async function handleLogout() {
     await logout();
     setSession(null);
+    setDataLoaded(false);
     setActiveView("dashboard");
     setAuthMode("login");
     setInventorySort({ key: null, dir: "asc" });
@@ -1331,6 +1390,22 @@ export default function App() {
     closeDeclineModal();
   }
 
+  if (sessionLoading) {
+    return (
+      <div className="auth-shell">
+        <div className="auth-panel">
+          <div className="auth-brand">
+            <div className="auth-top-logo">
+              <img src={logo} alt="Aushiva Logo" />
+            </div>
+            <h1><strong>AUSHIVA</strong></h1>
+            <p>Checking session...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!session) {
     return (
       <LoginScreen
@@ -1341,6 +1416,7 @@ export default function App() {
         errorMessage={authError}
         onToggleMode={() => setAuthMode((current) => current === "login" ? "signup" : "login")}
         onForgot={() => setAuthMode("reset")}
+        busy={authBusy}
       />
     );
   }
@@ -1868,12 +1944,12 @@ export default function App() {
                   <p className="results-copy">No submitted requests yet. Use the Request Transfer button above to create one.</p>
                 ) : (
                   <div className="request-status-section">
-                    <div className="request-status-summary">
-                      <button
-                        type="button"
-                        className={`request-status-card pending ${submittedStatusFilter === "pending" ? "active" : ""}`}
-                        onClick={() => setSubmittedStatusFilter("pending")}
-                      >
+                      <div className="request-status-summary">
+                        <button
+                          type="button"
+                          className={`request-status-card pending ${submittedStatusFilter === "pending" ? "active" : ""}`}
+                          onClick={() => setSubmittedStatusFilter("pending")}
+                        >
                         <strong>{submittedRequestCounts.pending}</strong>
                         <span>Requested</span>
                       </button>
@@ -1894,9 +1970,9 @@ export default function App() {
                         <span>Declined</span>
                       </button>
                     </div>
-                    {filteredSubmittedRequests.length === 0 ? (
-                      <p className="results-copy">No {submittedStatusFilter} requests to show right now.</p>
-                    ) : (
+                      {filteredSubmittedRequests.length === 0 ? (
+                        <p className="results-copy">No {submittedStatusFilter} requests to show right now.</p>
+                      ) : (
                     <div className="table-wrap">
                       <table>
                         <thead>

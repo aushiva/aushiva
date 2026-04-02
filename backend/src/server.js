@@ -219,7 +219,6 @@ app.post(
 app.post(
   "/api/login",
   asyncHandler(async (req, res) => {
-    await seedIfEmpty();
     const { email, password } = req.body || {};
     const user = email ? await getUserByEmail(email) : null;
     if (!user || user.password !== password) {

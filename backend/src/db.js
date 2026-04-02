@@ -480,10 +480,13 @@ async function selectOne(sql, params = []) {
 }
 
 function normalizeMedicine(row) {
+  const reorderLevel = row.reorderLevel ?? row.reorderlevel ?? null;
+  const manufacturingDate = row.manufacturingDate ?? row.manufacturingdate ?? null;
   return {
     ...row,
+    manufacturingDate,
     excess: Boolean(row.excess),
-    reorderLevel: row.reorderLevel === null ? undefined : row.reorderLevel
+    reorderLevel: reorderLevel === null ? undefined : reorderLevel
   };
 }
 
@@ -497,13 +500,25 @@ function serializeMedicine(medicine) {
 
 function normalizeRequest(row) {
   let declinedBy = [];
+  const declinedByRaw = row.declinedBy ?? row.declinedby ?? "[]";
   try {
-    declinedBy = row.declinedBy ? JSON.parse(row.declinedBy) : [];
+    declinedBy = declinedByRaw ? JSON.parse(declinedByRaw) : [];
   } catch {
     declinedBy = [];
   }
   return {
     ...row,
+    id: row.id,
+    barcode: row.barcode,
+    name: row.name,
+    quantity: row.quantity,
+    unit: row.unit,
+    fromHospital: row.fromHospital ?? row.fromhospital ?? "",
+    targetHospital: row.targetHospital ?? row.targethospital ?? "",
+    status: row.status,
+    direction: row.direction,
+    requestedAt: row.requestedAt ?? row.requestedat ?? "",
+    declineReason: row.declineReason ?? row.declinereason ?? "",
     declinedBy
   };
 }
